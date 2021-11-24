@@ -39,4 +39,8 @@ class LazyRoot extends LazyFolder implements IRootFolder {
 	public function getUserFolder($userId) {
 		return $this->__call(__FUNCTION__, func_get_args());
 	}
+
+	public function getHiddenUserFolder($userId) {
+		return $this->__call(__FUNCTION__, func_get_args());
+	}
 }
