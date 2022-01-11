@@ -86,7 +86,7 @@ class Version24000Date20211222112246 extends SimpleMigrationStep {
 			]);
 			$table->addColumn('reaction', Types::STRING, [
 				'notnull' => true,
-				'length' => 2,
+				'length' => 32,
 			]);
 			$table->setPrimaryKey(['id']);
 			$table->addIndex(['reaction'], 'comment_reaction');
