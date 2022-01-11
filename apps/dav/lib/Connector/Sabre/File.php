@@ -43,6 +43,7 @@ use OC\AppFramework\Http\Request;
 use OC\Files\Filesystem;
 use OC\Files\Stream\HashWrapper;
 use OC\Files\View;
+use OCA\DAV\AppInfo\Application;
 use OCA\DAV\Connector\Sabre\Exception\EntityTooLarge;
 use OCA\DAV\Connector\Sabre\Exception\FileLocked;
 use OCA\DAV\Connector\Sabre\Exception\Forbidden as DAVForbiddenException;
@@ -60,6 +61,7 @@ use OCP\Files\NotPermittedException;
 use OCP\Files\Storage;
 use OCP\Files\StorageNotAvailableException;
 use OCP\ILogger;
+use OCP\L10N\IFactory as IL10NFactory;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use OCP\Share\IManager;
@@ -73,6 +75,8 @@ use Sabre\DAV\IFile;
 
 class File extends Node implements IFile {
 	protected $request;
+	/** @var IL10NFactory $l10nFactory */
+	protected $l10nFactory;
 
 	/**
 	 * Sets up the node, expects a full path name
@@ -84,6 +88,8 @@ class File extends Node implements IFile {
 	 */
 	public function __construct(View $view, FileInfo $info, IManager $shareManager = null, Request $request = null) {
 		parent::__construct($view, $info, $shareManager);
+		// Querying IL10N results in a dependency loop
+		$this->l10nFactory = \OC::$server->get(IL10NFactory::class);
 
 		if (isset($request)) {
 			$this->request = $request;
@@ -127,7 +133,7 @@ class File extends Node implements IFile {
 				throw new Forbidden();
 			}
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("File is not updatable: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('File is not updatable: %1$s', [$e->getMessage()]));
 		}
 
 		// verify path of the target
@@ -161,7 +167,7 @@ class File extends Node implements IFile {
 			$partFilePath = $this->path;
 
 			if ($view && !$this->emitPreHooks($exists)) {
-				throw new Exception('Could not write to final file, canceled by hook');
+				throw new Exception($this->l10nFactory->get(Application::APP_ID)->t('Could not write to final file, canceled by hook'));
 			}
 		}
 
@@ -220,7 +226,7 @@ class File extends Node implements IFile {
 				if ($target === false) {
 					\OC::$server->getLogger()->error('\OC\Files\Filesystem::fopen() failed', ['app' => 'webdav']);
 					// because we have no clue about the cause we can only throw back a 500/Internal Server Error
-					throw new Exception('Could not write file contents');
+					throw new Exception($this->l10nFactory->get(Application::APP_ID)->t('Could not write file contents'));
 				}
 				[$count, $result] = \OC_Helper::streamCopy($data, $target);
 				fclose($target);
@@ -232,7 +238,7 @@ class File extends Node implements IFile {
 					$expected = $_SERVER['CONTENT_LENGTH'];
 				}
 				if ($expected !== "0") {
-					throw new Exception('Error while copying file to target location (copied bytes: ' . $count . ', expected filesize: ' . $expected . ' )');
+					throw new Exception($this->l10nFactory->get(Application::APP_ID)->t('Error while copying file to target location (copied bytes: %1$d, expected filesize: %2$d)', [$count, $expected]));
 				}
 			}
 
@@ -242,7 +248,7 @@ class File extends Node implements IFile {
 			if (isset($_SERVER['CONTENT_LENGTH']) && $_SERVER['REQUEST_METHOD'] === 'PUT') {
 				$expected = (int)$_SERVER['CONTENT_LENGTH'];
 				if ($count !== $expected) {
-					throw new BadRequest('Expected filesize of ' . $expected . ' bytes but read (from Nextcloud client) and wrote (to Nextcloud storage) ' . $count . ' bytes. Could either be a network problem on the sending side or a problem writing to the storage on the server side.');
+					throw new BadRequest($this->l10nFactory->get(Application::APP_ID)->t('Expected filesize of %1$d bytes but read (from Nextcloud client) and wrote (to Nextcloud storage) %2$d bytes. Could either be a network problem on the sending side or a problem writing to the storage on the server side.', [$expected, $count]));
 				}
 			}
 		} catch (\Exception $e) {
@@ -263,7 +269,7 @@ class File extends Node implements IFile {
 			if ($needsPartFile) {
 				if ($view && !$this->emitPreHooks($exists)) {
 					$partStorage->unlink($internalPartPath);
-					throw new Exception('Could not rename part file to final file, canceled by hook');
+					throw new Exception($this->l10nFactory->get(Application::APP_ID)->t('Could not rename part file to final file, canceled by hook'));
 				}
 				try {
 					$this->changeLock(ILockingProvider::LOCK_EXCLUSIVE);
@@ -292,7 +298,7 @@ class File extends Node implements IFile {
 					$fileExists = $storage->file_exists($internalPath);
 					if ($renameOkay === false || $fileExists === false) {
 						\OC::$server->getLogger()->error('renaming part file to final file failed $renameOkay: ' . ($renameOkay ? 'true' : 'false') . ', $fileExists: ' . ($fileExists ? 'true' : 'false') . ')', ['app' => 'webdav']);
-						throw new Exception('Could not rename part file to final file');
+						throw new Exception($this->l10nFactory->get(Application::APP_ID)->t('Could not rename part file to final file'));
 					}
 				} catch (ForbiddenException $ex) {
 					if (!$ex->getRetry()) {
@@ -350,7 +356,7 @@ class File extends Node implements IFile {
 				$this->refreshInfo();
 			}
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("Failed to check file size: " . $e->getMessage(), 0, $e);
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Failed to check file size: %1$s', [$e->getMessage()]), 0, $e);
 		}
 
 		return '"' . $this->info->getEtag() . '"';
@@ -435,14 +441,14 @@ class File extends Node implements IFile {
 				$this->convertToSabreException($e);
 			}
 			if ($res === false) {
-				throw new ServiceUnavailable("Could not open file");
+				throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Could not open file'));
 			}
 			return $res;
 		} catch (GenericEncryptionException $e) {
 			// returning 503 will allow retry of the operation at a later point in time
-			throw new ServiceUnavailable("Encryption not ready: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Encryption not ready: %1$s', [$e->getMessage()]));
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("Failed to open file: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Failed to open file: %1$s', [$e->getMessage()]));
 		} catch (ForbiddenException $ex) {
 			throw new DAVForbiddenException($ex->getMessage(), $ex->getRetry());
 		} catch (LockedException $e) {
@@ -467,7 +473,7 @@ class File extends Node implements IFile {
 				throw new Forbidden();
 			}
 		} catch (StorageNotAvailableException $e) {
-			throw new ServiceUnavailable("Failed to unlink: " . $e->getMessage());
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Failed to unlink: %1$s', [$e->getMessage()]));
 		} catch (ForbiddenException $ex) {
 			throw new DAVForbiddenException($ex->getMessage(), $ex->getRetry());
 		} catch (LockedException $e) {
@@ -521,7 +527,7 @@ class File extends Node implements IFile {
 
 		$info = \OC_FileChunking::decodeName($name);
 		if (empty($info)) {
-			throw new NotImplemented('Invalid chunk name');
+			throw new NotImplemented($this->l10nFactory->get(Application::APP_ID)->t('Invalid chunk name'));
 		}
 
 		$chunk_handler = new \OC_FileChunking($info);
@@ -533,7 +539,7 @@ class File extends Node implements IFile {
 				$expected = (int)$_SERVER['CONTENT_LENGTH'];
 				if ($bytesWritten !== $expected) {
 					$chunk_handler->remove($info['index']);
-					throw new BadRequest('Expected filesize of ' . $expected . ' bytes but read (from Nextcloud client) and wrote (to Nextcloud storage) ' . $bytesWritten . ' bytes. Could either be a network problem on the sending side or a problem writing to the storage on the server side.');
+					throw new BadRequest($this->l10nFactory->get(Application::APP_ID)->t('Expected filesize of %1$d bytes but read (from Nextcloud client) and wrote (to Nextcloud storage) %2$d bytes. Could either be a network problem on the sending side or a problem writing to the storage on the server side.', [$expected, $bytesWritten]));
 				}
 			}
 		}
@@ -580,7 +586,7 @@ class File extends Node implements IFile {
 							$targetStorage->unlink($targetInternalPath);
 						}
 						$this->fileView->changeLock($targetPath, ILockingProvider::LOCK_SHARED);
-						throw new Exception('Could not rename part file assembled from chunks');
+						throw new Exception($this->l10nFactory->get(Application::APP_ID)->t('Could not rename part file assembled from chunks'));
 					}
 				} else {
 					// assemble directly into the final file
@@ -664,13 +670,13 @@ class File extends Node implements IFile {
 		}
 		if ($e instanceof GenericEncryptionException) {
 			// returning 503 will allow retry of the operation at a later point in time
-			throw new ServiceUnavailable('Encryption not ready: ' . $e->getMessage(), 0, $e);
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Encryption not ready: %1$s', [$e->getMessage()]), 0, $e);
 		}
 		if ($e instanceof StorageNotAvailableException) {
-			throw new ServiceUnavailable('Failed to write file contents: ' . $e->getMessage(), 0, $e);
+			throw new ServiceUnavailable($this->l10nFactory->get(Application::APP_ID)->t('Failed to write file contents: %1$s', [$e->getMessage()]), 0, $e);
 		}
 		if ($e instanceof NotFoundException) {
-			throw new NotFound('File not found: ' . $e->getMessage(), 0, $e);
+			throw new NotFound($this->l10nFactory->get(Application::APP_ID)->t('File not found: %1$s', [$e->getMessage()]), 0, $e);
 		}
 
 		throw new \Sabre\DAV\Exception($e->getMessage(), 0, $e);
