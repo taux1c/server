@@ -74,12 +74,12 @@ class Version24000Date20211222112246 extends SimpleMigrationStep {
 				'length' => 11,
 				'unsigned' => true,
 			]);
-			$table->addColumn('actor_type', 'string', [
+			$table->addColumn('actor_type', Types::STRING, [
 				'notnull' => true,
 				'length' => 64,
 				'default' => '',
 			]);
-			$table->addColumn('actor_id', 'string', [
+			$table->addColumn('actor_id', Types::STRING, [
 				'notnull' => true,
 				'length' => 255,
 				'default' => '',
