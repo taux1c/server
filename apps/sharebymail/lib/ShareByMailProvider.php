@@ -333,13 +333,13 @@ class ShareByMailProvider implements IShareProvider {
 			$share->getExpirationDate()
 		);
 
-		if ($this->mailer->validateMailAddress($share->getSharedWith())) {
+		if (!$this->mailer->validateMailAddress($share->getSharedWith())) {
 			$this->removeShareFromTable($shareId);
 			$e = new HintException('Failed to send share by mail. Got an invalid email address: ' . $share->getSharedWith(),
 				$this->l->t('Failed to send share by email. Got an invalid email address'));
-			$this->logger->error($e->getMessage(), [
-				'message' => 'Failed to send share by mail. Got an invalid email address ' . $share->getSharedWith(),
+			$this->logger->error('Failed to send share by mail. Got an invalid email address ' . $share->getSharedWith(), [
 				'app' => 'sharebymail',
+				'exception' => $e,
 			]);
 		}
 
@@ -775,7 +775,7 @@ class ShareByMailProvider implements IShareProvider {
 		} catch (\Exception $e) {
 		}
 
-		$this->removeShareFromTable($share->getId());
+		$this->removeShareFromTable((int)$share->getId());
 	}
 
 	/**
@@ -971,9 +971,9 @@ class ShareByMailProvider implements IShareProvider {
 	/**
 	 * remove share from table
 	 *
-	 * @param string $shareId
+	 * @param int $shareId
 	 */
-	protected function removeShareFromTable($shareId) {
+	protected function removeShareFromTable(int $shareId): void {
 		$qb = $this->dbConnection->getQueryBuilder();
 		$qb->delete('share')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($shareId)));
