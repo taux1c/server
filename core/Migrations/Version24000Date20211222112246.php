@@ -81,7 +81,7 @@ class Version24000Date20211222112246 extends SimpleMigrationStep {
 			]);
 			$table->addColumn('actor_id', Types::STRING, [
 				'notnull' => true,
-				'length' => 255,
+				'length' => 64,
 				'default' => '',
 			]);
 			$table->addColumn('reaction', Types::STRING, [
